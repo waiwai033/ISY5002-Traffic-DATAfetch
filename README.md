@@ -167,9 +167,15 @@ python3 scripts/fetch_dataset.py
 
 ```
 data/dataset/
+├── README.md           # 数据集说明，含观测数与文件数的逐步对账
+├── manifest.csv        # 全部观测合并，按 (collected_at, camera_id) 去重
 ├── images/<camera_id>/<拍摄时间>_<id>_<时分>_<哈希>.jpg
-└── manifest.csv        # 全部观测合并，按 (collected_at, camera_id) 去重
+└── gallery/            # 相册，见下节
 ```
+
+其中 `README.md` 由脚本按实际数据现算生成（不是写死的），解释了
+**为什么观测记录数多于图片数** —— 一行记录是一次请求，一个文件是一帧不重复画面，
+差额来自 `stale` / `duplicate` / `missing` / `error` 以及重叠窗口重复取到的同一帧。
 
 同一帧在不同窗口里文件名和内容完全相同，复制时自然覆盖，不会重复计数。
 
@@ -178,11 +184,13 @@ data/dataset/
 ## 浏览已采集的图像
 
 ```bash
-python3 scripts/build_gallery.py          # 默认读 data/dataset
+python3 scripts/build_gallery.py          # 读 data/dataset，写 data/dataset/gallery
 python3 -m http.server 8791
 ```
 
-然后访问 http://localhost:8791/data/gallery/index.html
+然后访问 http://localhost:8791/data/dataset/gallery/index.html
+
+相册放在数据集内部，备份或转移数据集时会一并带走。
 （必须走 HTTP，浏览器不允许 `file://` 页面读取同目录以外的图片。）
 
 功能：按摄像头、日期、时段（夜间/早晚高峰/白天）筛选；**网格**视图按日分组、

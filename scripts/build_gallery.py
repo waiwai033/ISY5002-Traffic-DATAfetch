@@ -21,12 +21,17 @@ from fetch_lta_camera_images import ROOT, SG, load_cameras
 NAME = re.compile(r"(\d{8}T\d{6})Z_(\d+)_\d{4}_([0-9a-f]+)\.jpg$")
 
 
-def scan(source):
+def scan(source, exclude=None):
     """One entry per distinct frame; the same frame recurs across artifacts."""
     frames = {}
+    exclude = exclude.resolve() if exclude else None
     for path in source.rglob("*.jpg"):
         match = NAME.match(path.name)
         if not match:
+            continue
+        # Thumbnails keep the original filename, so an album written inside the
+        # dataset would otherwise be scanned back in as if it were source frames.
+        if exclude and exclude in path.resolve().parents:
             continue
         stamp, camera, digest = match.groups()
         captured = datetime.strptime(stamp, "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
@@ -57,7 +62,7 @@ def thumbnail(job):
 
 def build(source, out, workers):
     cameras = {c["CameraID"]: c for c in load_cameras(ROOT / "reference/camera_info.csv")}
-    frames = scan(source)
+    frames = scan(source, exclude=out)
     if not frames:
         raise SystemExit(f"No collected images found under {source}")
     rows = statuses(source)
@@ -305,7 +310,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=ROOT / "data/dataset",
                         help="Merged dataset from fetch_dataset.py (or a raw artifact dir)")
-    parser.add_argument("--out", type=Path, default=ROOT / "data/gallery")
+    parser.add_argument("--out", type=Path, default=ROOT / "data/dataset/gallery",
+                        help="Album lives inside the dataset so it travels with it")
     parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args(argv)
     build(args.source, args.out, args.workers)
