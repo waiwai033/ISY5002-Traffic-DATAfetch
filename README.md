@@ -1,9 +1,155 @@
-# ISY5002 · 三路段交通图像采集
+# ISY5002-Traffic-DATAfetch
 
-当前配置采集实时接口可用的 8 个摄像头，覆盖 Causeway、Second Link 和 Sentosa
-Gateway 三个路段组。采集方式沿用旧项目：定时请求 API、下载图片、保存每轮记录。
-本仓库最初只采 Sentosa，因此仓库名称保留 `ISY5002-Sentosa-Traffic`。
-当前尚未运行 YOLO 或训练模型。
+新加坡交通摄像头图像采集与数据集构建工具。采集 Causeway、Second Link、
+Sentosa Gateway 三个路段共 8 台摄像头，数据来自
+[data.gov.sg 实时交通图像接口](https://api.data.gov.sg/v1/transport/traffic-images)。
+
+采集由 GitHub Actions 自动完成，图片存为 Actions artifact；本仓库的脚本负责
+把它们取回本地、合并成数据集、并生成分布报告与可浏览相册。
+
+> 一周采集已于 2026-09-21 00:00 SGT 完成：**7,321 张图片 / 8,042 条观测 / 1.20 GB**。
+> artifact 保留 90 天（约至 12 月中旬），请及时取回。
+
+## 快速开始
+
+所有脚本只用 Python 3.11+ 标准库，无需 `pip install`；取数据需要
+[GitHub CLI](https://cli.github.com/)，相册缩略图用 macOS 自带的 `sips`。
+
+```bash
+gh auth login                            # 需要对本仓库的读权限
+
+python3 scripts/fetch_dataset.py         # 1. 取回并合并数据集
+python3 scripts/data_distribution.py     # 2. 生成数据分布报告
+python3 scripts/build_gallery.py         # 3. 生成可浏览相册
+python3 -m http.server 8791              # 4. 打开报告与相册
+```
+
+浏览器访问：
+
+- 数据分布 http://localhost:8791/data/dataset/distribution.html
+- 图像相册 http://localhost:8791/data/dataset/gallery/index.html
+
+（报告与相册都引用本地图片，必须走 HTTP，浏览器不允许 `file://` 页面读取同目录以外的文件。）
+
+## 1. 获取数据
+
+```bash
+python3 scripts/fetch_dataset.py
+```
+
+采集分成约 30 个 GitHub 运行窗口完成，图片因此散在几十个 artifact 里、各带一份
+manifest。这个脚本把它们合并成单一数据集：
+
+1. 列出全部未过期 artifact，逐个下载到 `data/github/all/<run_id>/`
+2. 按文件名合并去重 —— 同一帧在不同窗口里文件名与内容完全相同，复制时自然覆盖
+3. 合并所有 manifest，按 `(collected_at_utc, camera_id)` 去重
+4. 生成 `README.md`，用实际数据现算出观测数与文件数的对账
+
+产出：
+
+```
+data/dataset/
+├── README.md           数据集说明（脚本生成，数字不会与数据脱节）
+├── manifest.csv        全部观测记录
+├── images/<camera_id>/<拍摄时间>Z_<id>_<时分>_<内容哈希>.jpg
+├── distribution.html   分布报告（第 2 步生成）
+├── distribution.csv    分布数据（第 2 步生成）
+└── gallery/            可浏览相册（第 3 步生成）
+```
+
+**可重复运行**：已下载的 artifact 会跳过，只补新增。首次约 10 分钟 / 1.16 GB。
+
+| 参数 | 说明 |
+|---|---|
+| `--skip-download` | 只合并已缓存的，不访问网络 |
+| `--cache DIR` | 原始 artifact 缓存位置，默认 `data/github/all` |
+| `--out DIR` | 数据集输出位置，默认 `data/dataset` |
+| `--repo OWNER/NAME` | 换一个仓库来源 |
+
+### 为什么观测记录比图片多
+
+**一行 manifest = 一次请求；一个文件 = 一帧不重复画面。** 每 10 分钟一轮、
+每轮 8 台摄像头，只要发起请求就留一条记录，哪怕没拿到新画面：
+
+```
+8,042 条观测
+  − 473 条无画面（stale 348 + missing 103 + error 22）
+  − 168 条画面未变化（duplicate，sha256 相同，不写新文件）
+  = 7,401 条 downloaded
+  −  80 条同一帧被两个重叠窗口各取了一次
+  = 7,321 张不重复画面
+```
+
+完整解释见脚本生成的 `data/dataset/README.md`。
+
+## 2. 构建数据分布
+
+```bash
+python3 scripts/data_distribution.py
+```
+
+读取 `data/dataset/manifest.csv`，输出三样东西：
+
+- **终端摘要** —— ASCII 直方图，快速查看
+- **`distribution.csv`** —— 长表格式 `breakdown,key,frames`，便于导入 pandas
+- **`distribution.html`** —— 图表报告，内联 SVG，无任何外部依赖
+
+报告包含五张图：
+
+| 图 | 用途 |
+|---|---|
+| 按小时分布（SGT） | 查看昼夜采样密度差异 |
+| 按日期分布 | 查看逐日完整度 |
+| 按摄像头分布 | 确认八台摄像头是否均衡 |
+| 按状态分布 | downloaded / duplicate / stale / missing / error 构成 |
+| 帧龄分布 | 采集时刻与实际拍摄时刻的间隔 |
+
+每张图都可展开对应数据表；柱子悬停显示具体数值；深浅色主题各自独立配色。
+
+所有分布口径统一为**不重复图片文件数**（而非观测条数），因此各图总和都等于
+`images/` 的实际文件数，与数据集 README 对得上。
+
+导入分析：
+
+```python
+import pandas as pd
+d = pd.read_csv("data/dataset/distribution.csv")
+by_hour = d[d.breakdown == "hour_sgt"].set_index("key")["frames"]
+
+m = pd.read_csv("data/dataset/manifest.csv", parse_dates=["captured_at_utc", "collected_at_utc"])
+imgs = m[m.status == "downloaded"]           # 只有这些对应实际文件
+```
+
+> 做时间序列分析请用 **`captured_at_utc`**（实际拍摄时刻）而非 `collected_at_utc`
+> （发起请求时刻）。两者差值即帧龄，深夜可达数小时。
+
+### 已知采样偏差
+
+摄像头深夜会长时间不刷新画面（实测最长 215 分钟）。采集前期的新鲜度上限是
+15 分钟，导致 **9/14–9/15 两天凌晨**的画面被大量判为 `stale` 丢弃；9/16 起上限
+放宽到 240 分钟后凌晨轮次恢复完整。分布报告的「按日期」一图可以直接看到这个台阶，
+建模时请注意这两天的采样偏差。
+
+## 3. 浏览图像
+
+```bash
+python3 scripts/build_gallery.py
+```
+
+生成 `data/dataset/gallery/`，放在数据集内部，备份或转移时一并带走。
+
+支持按摄像头、日期、时段筛选；**网格**视图按日分组、缩略图懒加载、点击放大；
+**时间轴**视图把单台摄像头的序列当延时片播放，← → 单帧步进、空格播放暂停。
+每帧标注拍摄时间与帧龄，超过 20 分钟标橙色，便于识别静止时段。
+
+缩略图由 macOS 自带的 `sips` 生成（约 23 KB/张），原图按需加载；重复运行只补新增帧。
+7,321 帧约需 100 秒。
+
+---
+
+# 采集端（已完成，供复现参考）
+
+以下为采集侧的配置与实现说明。数据已采完，除非要重新发起采集，否则无需阅读。
 
 ## 本周采集计划
 
@@ -88,9 +234,9 @@ caffeinate -i python3 scripts/run_collection_week.py
 
 ```bash
 # 启用持续排程（public 仓库标准 runner 免费）
-gh variable set COLLECTION_ENABLED --body true --repo waiwai033/ISY5002-Sentosa-Traffic
+gh variable set COLLECTION_ENABLED --body true --repo waiwai033/ISY5002-Traffic-DATAfetch
 # 关闭后续排程
-gh variable set COLLECTION_ENABLED --body false --repo waiwai033/ISY5002-Sentosa-Traffic
+gh variable set COLLECTION_ENABLED --body false --repo waiwai033/ISY5002-Traffic-DATAfetch
 ```
 
 ### 为什么不靠 cron
@@ -141,65 +287,13 @@ cron 保留为**看门狗**，它**不采集任何数据**，只回答一个问�
 
 manifest 记录的始终是真实请求时间，采样时刻以 manifest 为准。
 
-下载附件并及时归档：
+每个采集窗口各自保存 manifest 和状态，artifact 保留 **90 天**。
+取回与合并请用 `scripts/fetch_dataset.py`（见文首「获取数据」），它会处理
+跨窗口去重；只在需要单独查看某次运行时才手动下载：
 
 ```bash
-# 单次运行
-gh run download RUN_ID --repo waiwai033/ISY5002-Sentosa-Traffic --dir data/github/RUN_ID
-# 一次性取回全部采样附件，图片按 images/<camera_id>/<拍摄时间>.jpg 自然合并
-gh run download --repo waiwai033/ISY5002-Sentosa-Traffic --dir data/github/all
+gh run download RUN_ID --repo waiwai033/ISY5002-Traffic-DATAfetch --dir data/github/RUN_ID
 ```
-
-不同 Actions 批次各自保存 manifest 和状态；合并时按 `camera_id + sha256` 去重，
-不把多个不同摄像头的相似画面当成同一观测。附件应在 30 天内下载。
-
-## 获取采集的数据
-
-采集分成约 30 个 GitHub 窗口跑完，图片散在几十个 artifact 里、各带一份 manifest。
-一条命令合并成单一数据集：
-
-```bash
-python3 scripts/fetch_dataset.py
-```
-
-它会下载全部未过期 artifact（缓存在 `data/github/all/`，重复运行跳过已下载的），
-按文件名合并去重，产出：
-
-```
-data/dataset/
-├── README.md           # 数据集说明，含观测数与文件数的逐步对账
-├── manifest.csv        # 全部观测合并，按 (collected_at, camera_id) 去重
-├── images/<camera_id>/<拍摄时间>_<id>_<时分>_<哈希>.jpg
-└── gallery/            # 相册，见下节
-```
-
-其中 `README.md` 由脚本按实际数据现算生成（不是写死的），解释了
-**为什么观测记录数多于图片数** —— 一行记录是一次请求，一个文件是一帧不重复画面，
-差额来自 `stale` / `duplicate` / `missing` / `error` 以及重叠窗口重复取到的同一帧。
-
-同一帧在不同窗口里文件名和内容完全相同，复制时自然覆盖，不会重复计数。
-
-常用参数：`--skip-download` 只合并已缓存的；`--out` 换输出目录；`--cache` 换缓存位置。
-
-## 浏览已采集的图像
-
-```bash
-python3 scripts/build_gallery.py          # 读 data/dataset，写 data/dataset/gallery
-python3 -m http.server 8791
-```
-
-然后访问 http://localhost:8791/data/dataset/gallery/index.html
-
-相册放在数据集内部，备份或转移数据集时会一并带走。
-（必须走 HTTP，浏览器不允许 `file://` 页面读取同目录以外的图片。）
-
-功能：按摄像头、日期、时段（夜间/早晚高峰/白天）筛选；**网格**视图按日分组、
-缩略图懒加载、点击放大；**时间轴**视图把某台摄像头的序列当延时片播放，
-支持 ← → 单帧步进和空格播放暂停。每帧标注拍摄时间和**帧龄**
-（拍摄到采集的间隔），帧龄超过 20 分钟标橙色，便于识别静止时段。
-
-缩略图由 macOS 自带的 `sips` 生成（约 23 KB/张），原图按需加载。
-重复运行只补新增帧。7,321 帧约需 100 秒。
 
 ## 数据来源与密钥
 

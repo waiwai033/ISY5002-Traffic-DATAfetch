@@ -17,7 +17,7 @@ from pathlib import Path
 
 from fetch_lta_camera_images import FIELDS, ROOT
 
-REPO = "waiwai033/ISY5002-Sentosa-Traffic"
+REPO = "waiwai033/ISY5002-Traffic-DATAfetch"
 
 
 def gh(args):

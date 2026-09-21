@@ -21,8 +21,8 @@ LTA 带密钥路径仅经过模拟测试；本机未配置 LTA_API_KEY。
 
 ## GitHub 云端试采
 
-- 私有仓库：`waiwai033/ISY5002-Sentosa-Traffic`，默认分支 main。
-- [运行 34743008577](https://github.com/waiwai033/ISY5002-Sentosa-Traffic/actions/runs/34743008577)
+- 仓库：`waiwai033/ISY5002-Traffic-DATAfetch`，默认分支 main。
+- [运行 34743008577](https://github.com/waiwai033/ISY5002-Traffic-DATAfetch/actions/runs/34743008577)
   于 2026-09-13 成功完成，参数 `duration_minutes=0`。
 - 生成附件 `sentosa-images-34743008577-1`，ZIP 大小 335251 字节。
 - 附件已下载回本地 `data/github/34743008577/`；两台摄像头均为 downloaded，
@@ -34,7 +34,7 @@ LTA 带密钥路径仅经过模拟测试；本机未配置 LTA_API_KEY。
 以上是初始 Sentosa 两点版本的历史记录。当前版本已扩展为 8 个摄像头、3 个路段组。
 
 - 代码提交：`dfadd94`，已推送到 GitHub main。
-- [八点云端试采 34757763680](https://github.com/waiwai033/ISY5002-Sentosa-Traffic/actions/runs/34757763680)
+- [八点云端试采 34757763680](https://github.com/waiwai033/ISY5002-Traffic-DATAfetch/actions/runs/34757763680)
   成功完成，执行耗时 14 秒。
 - 8/8 图片均为 downloaded，源时间为 2026-09-13 20:40:23 +08:00。
 - 附件已下载到本地 `data/github/34757763680/`；全部图片字节数与 SHA256 核对一致，
