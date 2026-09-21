@@ -153,36 +153,45 @@ gh run download --repo waiwai033/ISY5002-Sentosa-Traffic --dir data/github/all
 不同 Actions 批次各自保存 manifest 和状态；合并时按 `camera_id + sha256` 去重，
 不把多个不同摄像头的相似画面当成同一观测。附件应在 30 天内下载。
 
-## 浏览已采集的图像
+## 获取采集的数据
 
-先把 artifact 拉到本地，再生成相册：
+采集分成约 30 个 GitHub 窗口跑完，图片散在几十个 artifact 里、各带一份 manifest。
+一条命令合并成单一数据集：
 
 ```bash
-# 拉取全部 artifact（按 run 分目录）
-for r in $(gh api repos/waiwai033/ISY5002-Sentosa-Traffic/actions/artifacts --paginate \
-  -q '.artifacts[] | select(.expired==false) | .workflow_run.id' | sort -u); do
-  gh run download "$r" --dir "data/github/all/$r"
-done
-
-# 生成相册（缩略图 + HTML，约 30 秒 / 2000 帧）
-python3 scripts/build_gallery.py
+python3 scripts/fetch_dataset.py
 ```
 
-相册需要通过 HTTP 打开（浏览器不允许 `file://` 页面读取同目录以外的图片）：
+它会下载全部未过期 artifact（缓存在 `data/github/all/`，重复运行跳过已下载的），
+按文件名合并去重，产出：
+
+```
+data/dataset/
+├── images/<camera_id>/<拍摄时间>_<id>_<时分>_<哈希>.jpg
+└── manifest.csv        # 全部观测合并，按 (collected_at, camera_id) 去重
+```
+
+同一帧在不同窗口里文件名和内容完全相同，复制时自然覆盖，不会重复计数。
+
+常用参数：`--skip-download` 只合并已缓存的；`--out` 换输出目录；`--cache` 换缓存位置。
+
+## 浏览已采集的图像
 
 ```bash
+python3 scripts/build_gallery.py          # 默认读 data/dataset
 python3 -m http.server 8791
 ```
 
 然后访问 http://localhost:8791/data/gallery/index.html
+（必须走 HTTP，浏览器不允许 `file://` 页面读取同目录以外的图片。）
 
 功能：按摄像头、日期、时段（夜间/早晚高峰/白天）筛选；**网格**视图按日分组、
 缩略图懒加载、点击放大；**时间轴**视图把某台摄像头的序列当延时片播放，
 支持 ← → 单帧步进和空格播放暂停。每帧标注拍摄时间和**帧龄**
-（拍摄到采集的间隔），帧龄超过 20 分钟会标橙色，便于识别静止时段。
+（拍摄到采集的间隔），帧龄超过 20 分钟标橙色，便于识别静止时段。
 
 缩略图由 macOS 自带的 `sips` 生成（约 23 KB/张），原图按需加载。
-重复运行只补新增帧，不会重做已有缩略图。
+重复运行只补新增帧。7,321 帧约需 100 秒。
 
 ## 数据来源与密钥
 

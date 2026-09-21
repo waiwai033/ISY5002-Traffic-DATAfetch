@@ -303,8 +303,8 @@ filter();
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, default=ROOT / "data/github/all",
-                        help="Directory holding downloaded artifacts")
+    parser.add_argument("--source", type=Path, default=ROOT / "data/dataset",
+                        help="Merged dataset from fetch_dataset.py (or a raw artifact dir)")
     parser.add_argument("--out", type=Path, default=ROOT / "data/gallery")
     parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args(argv)
