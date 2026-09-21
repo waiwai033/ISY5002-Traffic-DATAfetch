@@ -15,7 +15,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from fetch_lta_camera_images import FIELDS, ROOT
+from fetch_lta_camera_images import FIELDS, ROOT, load_cameras
 
 REPO = "waiwai033/ISY5002-Traffic-DATAfetch"
 
@@ -73,7 +73,12 @@ def merge(cache, out):
         shutil.copy2(source, target)
         copied += 1
 
-    rows, seen = [], set()
+    # The earliest trial rows carry pre-standardisation segment names
+    # (sentosa_gateway_inbound/_outbound). Left alone they split one road group
+    # into three in any group-by, so the current roster is treated as canonical.
+    roster = {c["CameraID"]: c["RoadSegment"]
+              for c in load_cameras(ROOT / "reference/camera_info.csv")}
+    rows, seen, relabelled = [], set(), 0
     for manifest in sorted(cache.rglob("manifest.csv")):
         with manifest.open(newline="", encoding="utf-8") as stream:
             for row in csv.DictReader(stream):
@@ -81,7 +86,13 @@ def merge(cache, out):
                 if key in seen:
                     continue
                 seen.add(key)
+                canonical = roster.get(row.get("camera_id"))
+                if canonical and row.get("road_segment") != canonical:
+                    row["road_segment"] = canonical
+                    relabelled += 1
                 rows.append(row)
+    if relabelled:
+        print(f"  {relabelled} row(s) relabelled to the canonical road_segment")
     rows.sort(key=lambda r: (r.get("collected_at_utc", ""), r.get("camera_id", "")))
     with (out / "manifest.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.DictWriter(stream, fieldnames=FIELDS, extrasaction="ignore")

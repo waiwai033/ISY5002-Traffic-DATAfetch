@@ -8,7 +8,29 @@ Sentosa Gateway 三个路段共 8 台摄像头，数据来自
 把它们取回本地、合并成数据集、并生成分布报告与可浏览相册。
 
 > 一周采集已于 2026-09-21 00:00 SGT 完成：**7,321 张图片 / 8,042 条观测 / 1.20 GB**。
-> artifact 保留 90 天（约至 12 月中旬），请及时取回。
+
+## 直接下载数据集（推荐）
+
+数据已打包发布在 **[Releases v1.0](https://github.com/waiwai033/ISY5002-Traffic-DATAfetch/releases/tag/v1.0)** ——
+**无需登录、无需 GitHub CLI、不会过期**：
+
+| 文件 | 大小 | 内容 |
+|---|---|---|
+| `metadata.tar.gz` | 654 KB | manifest、数据集说明、分布报告 —— 先下这个看合不合用 |
+| `images.tar.gz` | 1.1 GB | 全部 7,321 张原图 |
+| `gallery.tar.gz` | 159 MB | 可浏览相册，解压即用 |
+
+```bash
+curl -LO https://github.com/waiwai033/ISY5002-Traffic-DATAfetch/releases/download/v1.0/metadata.tar.gz
+tar xzf metadata.tar.gz
+```
+
+> 对比：Actions artifact 需要登录 GitHub 才能下载（匿名请求返回 401），
+> 且会过期 —— 最早的 5 个 2026-10-13 到期，其余 12 月中旬。Release 附件两者都没有限制。
+
+## 从 artifact 重新采集 / 重建（需要 GitHub 登录）
+
+以下流程用于重新取回原始 artifact 并自行重建数据集。只想用数据的话，上面的 Release 就够了。
 
 ## 快速开始
 
