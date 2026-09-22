@@ -30,6 +30,8 @@ def run(argv=None):
     mode.add_argument('--sample', action='store_true',
                       help='One campaign cycle now; skipped outside the campaign window')
     parser.add_argument('--max-runtime-minutes', type=positive, help='Limit one GitHub worker batch')
+    parser.add_argument('--max-wait-minutes', type=float, default=0,
+                        help='Idle this long for a campaign that has not opened yet')
     args = parser.parse_args(argv)
     plan, start, end, cameras = load_plan(args.config)
     if args.check:
@@ -60,10 +62,18 @@ def run(argv=None):
     else:
         command += ['--start-at', plan['start_at'], '--end-at', plan['end_at']]
         if args.max_runtime_minutes:
-            # Scheduled jobs must be gated by the workflow; don't wait for days on a runner.
-            if datetime.now(timezone.utc) < start:
-                print('Campaign has not started; bounded worker skipped')
+            # A worker may be launched before the window opens so that collection can
+            # begin on the minute rather than whenever a cron tick happens to land.
+            # The collector idles until start_at; the workflow sizes the budget so the
+            # wait plus the collecting fits inside one job. Never wait for days.
+            wait = (start - datetime.now(timezone.utc)).total_seconds() / 60
+            if wait > args.max_wait_minutes:
+                print(f'Campaign opens in {wait:.0f} minutes, beyond the '
+                      f'{args.max_wait_minutes:.0f}-minute launch window; worker skipped')
                 return 0
+            if wait > 0:
+                print(f'Waiting {wait:.0f} minutes for the campaign to open at '
+                      f'{plan["start_at"]}')
             command += ['--duration-days', str(args.max_runtime_minutes / 1440)]
         else:
             command += ['--duration-days', str((end-start).total_seconds() / 86400)]

@@ -40,15 +40,24 @@ class CollectorTests(unittest.TestCase):
                           for group in {x['RoadSegment'] for x in cameras}},
                          {'causeway': 3, 'second_link': 3, 'sentosa_gateway': 2})
 
-    def test_week_plan_uses_minute_21_and_1006_rounds(self):
+    def test_week_plan_is_a_clean_campaign(self):
+        # Asserts the properties any campaign must have rather than one week's
+        # literals, so a re-dated plan does not fail a test that is still correct.
         plan = json.loads((c.ROOT / 'reference/collection_week.json').read_text())
         start, end = map(c.parse_timestamp, (plan['start_at'], plan['end_at']))
-        self.assertEqual(start.weekday(), 6)
-        self.assertEqual(start.astimezone(c.SG).weekday(), 0)
-        self.assertEqual(start.astimezone(c.SG).strftime('%H:%M'), '00:21')
-        self.assertEqual(math.ceil((end-start).total_seconds() / (plan['interval_minutes']*60)), 1006)
-        self.assertEqual((start+timedelta(minutes=1005*10)).astimezone(c.SG).strftime('%Y-%m-%d %H:%M'),
-                         '2026-09-20 23:51')
+        interval = plan['interval_minutes']
+        self.assertLess(start, end)
+        local = start.astimezone(c.SG)
+        self.assertEqual(local.second, 0)
+        self.assertEqual(local.minute % interval, 0,
+                         'start must sit on the sampling grid so ticks land on round minutes')
+        rounds = math.ceil((end - start).total_seconds() / (interval * 60))
+        self.assertEqual(rounds, (end - start).total_seconds() / (interval * 60),
+                         'the window should be a whole number of sampling rounds')
+        last = start + timedelta(minutes=(rounds - 1) * interval)
+        self.assertLess(last, end, 'the final tick must fall inside the window')
+        self.assertGreaterEqual(plan['max_age_minutes'], 240,
+                                'quiet-hour frames age for hours; see the stale-frame finding')
 
     def test_future_start_grid_and_exclusive_end(self):
         anchor = datetime(2026, 9, 13, 16, 21, tzinfo=timezone.utc)

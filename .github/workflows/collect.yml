@@ -41,6 +41,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
+          LAUNCH_LEAD_MINUTES: ${{ vars.LAUNCH_LEAD_MINUTES || '300' }}
         run: |
           python - <<'PY'
           import json, os, subprocess, sys
@@ -58,8 +59,14 @@ jobs:
           busy = {'in_progress', 'queued', 'pending', 'waiting', 'requested'}
           alive = [r for r in json.loads(listing)
                    if r['databaseId'] != mine and r['status'] in busy]
-          if not start <= now < end:
-              verdict = 'Outside the campaign window; not restarting'
+          # A worker may be launched before the window opens: it idles until start_at
+          # so collection begins on the minute instead of whenever a tick lands.
+          lead = float(os.environ.get('LAUNCH_LEAD_MINUTES', '300'))
+          ahead = (start - now).total_seconds() / 60
+          if now >= end:
+              verdict = 'The campaign window has closed; not restarting'
+          elif ahead > lead:
+              verdict = f'Campaign opens in {ahead:.0f} minutes, beyond the {lead:.0f}-minute lead; waiting'
           elif alive:
               verdict = f'{len(alive)} collection run(s) already alive; nothing to restart'
           else:
@@ -92,6 +99,7 @@ jobs:
           MODE: ${{ inputs.mode }}
           DURATION: ${{ inputs.duration_minutes || '55' }}
           CHAIN_MINUTES: ${{ vars.CHAIN_BATCH_MINUTES || '340' }}
+          JOB_BUDGET_MINUTES: '340'
         run: |
           python - <<'PY'
           import os, sys, time
@@ -103,13 +111,18 @@ jobs:
           now = datetime.now(timezone.utc)
           mode = os.environ['MODE']
           minutes = 0.0
+          wait = max(0.0, (start - now).total_seconds() / 60)
           if mode in ('chain', 'batch'):
               limit = 350 if mode == 'chain' else 55
               minutes = float(os.environ['CHAIN_MINUTES'] if mode == 'chain' else os.environ['DURATION'])
               if not 0 < minutes <= limit:
                   raise SystemExit(f'{mode} duration must be between 1 and {limit} minutes')
-              minutes = min(minutes, (end - now).total_seconds() / 60)
-          run = mode == 'trial' or (start <= now < end and (mode == 'sample' or minutes > 0))
+              # Idling before the window opens spends the same job budget as collecting,
+              # so the two together have to fit or the runner is killed mid-batch.
+              budget = float(os.environ['JOB_BUDGET_MINUTES'])
+              minutes = min(minutes, budget - wait, (end - max(now, start)).total_seconds() / 60)
+          run = now < end and (mode == 'trial' or mode == 'sample' and start <= now
+                               or mode in ('chain', 'batch') and minutes > 0)
           path = TRIAL_DIR if mode == 'trial' else plan['output_dir']
           label = {'chain': 'Self-renewing collection window', 'sample': 'Single ten-minute sample',
                    'batch': 'Bounded catch-up batch', 'trial': 'One-round trial'}[mode]
@@ -124,6 +137,7 @@ jobs:
                                 '`COLLECTION_ENABLED` to `false` so the watchdog stops restarting it.\n')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
               stream.write(f'run={str(run).lower()}\nmode={mode}\nminutes={minutes}\npath={path}\n')
+              stream.write(f'wait={wait}\nweek={Path(plan["output_dir"]).name}\n')
               stream.write(f'started={time.time()}\n')
           PY
       - name: Collect images and manifest
@@ -133,20 +147,22 @@ jobs:
           LTA_API_KEY: ${{ secrets.LTA_API_KEY }}
           MODE: ${{ steps.window.outputs.mode }}
           MINUTES: ${{ steps.window.outputs.minutes }}
+          WAIT: ${{ steps.window.outputs.wait }}
         run: |
           python - <<'PY'
           import os, subprocess, sys
           mode = os.environ['MODE']
           command = [sys.executable, 'scripts/run_collection_week.py']
           command += {'sample': ['--sample'], 'trial': ['--once']}.get(
-              mode, ['--max-runtime-minutes', os.environ['MINUTES']])
+              mode, ['--max-runtime-minutes', os.environ['MINUTES'],
+                     '--max-wait-minutes', os.environ['WAIT']])
           subprocess.run(command, check=True)
           PY
       - name: Preserve images and metadata
         if: always() && steps.window.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: traffic-${{ github.run_id }}-${{ github.run_attempt }}
+          name: traffic-${{ steps.window.outputs.week }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ steps.window.outputs.path }}/images/
             ${{ steps.window.outputs.path }}/metadata/

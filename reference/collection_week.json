@@ -1,9 +1,9 @@
 {
   "source": "data-gov-sg",
   "camera_csv": "reference/camera_info.csv",
-  "output_dir": "data/week-20260914",
-  "start_at": "2026-09-14T00:21:00+08:00",
-  "end_at": "2026-09-21T00:00:00+08:00",
+  "output_dir": "data/week-20260923",
+  "start_at": "2026-09-23T00:00:00+08:00",
+  "end_at": "2026-09-30T00:00:00+08:00",
   "interval_minutes": 10,
   "active_start": "00:00",
   "active_end": "24:00",
