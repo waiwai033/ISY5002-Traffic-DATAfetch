@@ -7,26 +7,39 @@ Sentosa Gateway 三个路段共 8 台摄像头，数据来自
 采集由 GitHub Actions 自动完成，图片存为 Actions artifact；本仓库的脚本负责
 把它们取回本地、合并成数据集、并生成分布报告与可浏览相册。
 
-> 一周采集已于 2026-09-21 00:00 SGT 完成：**7,321 张图片 / 8,042 条观测 / 1.20 GB**。
+> 已完成两周采集：第一周 **7,321 张图片**，第二周 **7,995 张图片**。
 
 ## 直接下载数据集（推荐）
 
-数据已打包发布在 **[Releases v1.0](https://github.com/waiwai033/ISY5002-Traffic-DATAfetch/releases/tag/v1.0)** ——
-**无需登录、无需 GitHub CLI、不会过期**：
+两周数据分别发布，可匿名下载：
+
+| 采集时间（SGT） | Release | 图片 |
+|---|---|---:|
+| 2026-09-14 至 09-21 | [第一周 v1.0](https://github.com/waiwai033/ISY5002-Traffic-DATAfetch/releases/tag/v1.0) | 7,321 张 |
+| 2026-09-23 至 09-30 | [第二周 week-20260923](https://github.com/waiwai033/ISY5002-Traffic-DATAfetch/releases/tag/week-20260923) | 7,995 张 |
+
+第二周 Release 包含以下附件；**无需登录、无需 GitHub CLI**：
 
 | 文件 | 大小 | 内容 |
 |---|---|---|
-| `metadata.tar.gz` | 654 KB | manifest、数据集说明、分布报告 —— 先下这个看合不合用 |
-| `images.tar.gz` | 1.1 GB | 全部 7,321 张原图 |
-| `gallery.tar.gz` | 159 MB | 可浏览相册，解压即用 |
+| `metadata.tar.gz` | 约 0.7 MB | manifest、数据集说明、分布报告 —— 先下这个看合不合用 |
+| `images.tar.gz` | 约 1.2 GB | 该周全部原图 |
+| `gallery.tar.gz` | 约 169 MB | 可浏览相册；和原图解压到同一目录 |
+| `SHA256SUMS.txt` | 很小 | 三个压缩包的 SHA-256 校验值 |
 
 ```bash
-curl -LO https://github.com/waiwai033/ISY5002-Traffic-DATAfetch/releases/download/v1.0/metadata.tar.gz
+curl -LO https://github.com/waiwai033/ISY5002-Traffic-DATAfetch/releases/download/week-20260923/metadata.tar.gz
 tar xzf metadata.tar.gz
 ```
 
 > 对比：Actions artifact 需要登录 GitHub 才能下载（匿名请求返回 401），
-> 且会过期 —— 最早的 5 个 2026-10-13 到期，其余 12 月中旬。Release 附件两者都没有限制。
+> 且有保留期限。Release 附件不会随 Actions artifact 一起过期。
+
+第二周压缩包由 `scripts/package_week_release.py` 用 Python `tarfile` 生成，不含
+macOS 产生的 `._` 元数据文件；请将三个压缩包**解压到同一个目录**，使
+`images/` 和 `gallery/` 成为同级目录。
+第一周的 v1.0 包由 macOS `tar` 生成，解压后若出现 `._` 文件，可直接删除；
+这些是 macOS 元数据，不是图片。
 
 ## 从 artifact 重新采集 / 重建（需要 GitHub 登录）
 

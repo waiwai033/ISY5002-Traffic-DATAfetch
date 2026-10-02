@@ -105,7 +105,7 @@ README = """# Sentosa / 新柔通道 交通摄像头数据集
 
 由 `scripts/fetch_dataset.py` 生成于 {built}。
 采集自 [data.gov.sg 实时交通图像接口](https://api.data.gov.sg/v1/transport/traffic-images)，
-经由 GitHub Actions 连续运行约 30 个采集窗口完成。
+经由 GitHub Actions 多个采集窗口完成。
 
 采集区间：{first} → {last} UTC
 
@@ -175,10 +175,9 @@ dataset/
 
 ## 已知特征
 
-**凌晨时段样本较稀疏。** 摄像头在深夜会长时间不刷新画面（实测最长 215 分钟）。
-采集前期的新鲜度上限是 15 分钟，导致 9/14–9/15 两天凌晨的画面被大量判为 `stale` 丢弃；
-9/16 起上限调整为 240 分钟后，凌晨轮次恢复完整。因此 **9/14–9/15 的 00:00–07:00
-时段数据量明显低于其后几天**，建模时请注意这段的采样偏差。
+摄像头可能长时间不刷新画面。`stale` 记录表示返回画面的拍摄时间已经超过本次
+采集配置的新鲜度上限；`duplicate` 表示画面内容没有变化。分析时请结合
+`captured_at_utc`、`collected_at_utc` 和 `status` 判断实际时间覆盖情况。
 
 ## 浏览
 

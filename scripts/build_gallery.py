@@ -7,6 +7,7 @@ on disk; it references them by relative path rather than embedding them.
 import argparse
 import csv
 import html
+import os
 import json
 import re
 import subprocess
@@ -82,7 +83,7 @@ def build(source, out, workers):
             age = round(delta.total_seconds() / 60, 1)
         records.append({
             "n": name,
-            "f": str(Path(frame["file"]).resolve().relative_to(ROOT.resolve())),
+            "f": os.path.relpath(frame["file"].resolve(), source.resolve()),
             "t": str(thumb.resolve().relative_to(out.resolve())),
             "c": frame["camera"],
             "u": frame["captured"].isoformat(),
@@ -98,8 +99,10 @@ def build(source, out, workers):
 
     roster = {cid: {"name": c.get("LocationName", cid), "road": c.get("RoadSegment", ""),
                     "dir": c.get("Direction", "")} for cid, c in cameras.items()}
-    # The album is opened from out/, so originals need a prefix back to the repo root.
-    prefix = Path(*[".."] * len(out.resolve().relative_to(ROOT.resolve()).parts))
+    # Both halves of the path stay relative to the dataset, never to the repository,
+    # so the album works wherever the dataset is unpacked - in the repo, or beside
+    # images/ after a release archive is extracted somewhere else entirely.
+    prefix = os.path.relpath(source.resolve(), out.resolve())
     page = TEMPLATE.replace("__DATA__", json.dumps(records, separators=(",", ":")))
     page = page.replace("__CAMERAS__", json.dumps(roster, ensure_ascii=False))
     page = page.replace("__PREFIX__", json.dumps(str(prefix)))
@@ -249,11 +252,23 @@ function drawGrid(){
       </figure>`}).join("")).join("");
 }
 
+// Without images/ beside the album only thumbnails exist; fall back to those
+// rather than showing an empty frame, and say so once.
+let missingFull=false;
+function noteMissing(){
+  if(missingFull)return; missingFull=true;
+  const b=document.createElement("div");
+  b.className="hint"; b.style.color="#c2723a";
+  b.textContent="找不到原图目录 images/，正在显示缩略图。把 images.tar.gz 解压到本页所在目录的上一级即可看原图。";
+  $("player").appendChild(b);
+}
 function drawPlayer(){
   if(!rows.length){$("frame").removeAttribute("src");$("stamp").textContent="";return}
   $("seek").max=rows.length-1; $("seek").value=idx;
   const r=rows[idx];
-  $("frame").src=full(r);
+  const el=$("frame");
+  el.onerror=()=>{el.onerror=null;el.src=r.t;noteMissing()};
+  el.src=full(r);
   $("stamp").textContent=`${r.s} SGT · ${idx+1}/${rows.length}`+(r.a===""?"":` · 帧龄 ${r.a}m`);
   for(const j of [idx+1,idx+2]) if(rows[j]) new Image().src=full(rows[j]);
 }
@@ -286,7 +301,9 @@ $("speed").onchange=()=>{if(timer){stop();toggle()}};
 $("grid").onclick=e=>{
   const fig=e.target.closest("figure"); if(!fig)return;
   const r=rows.find(x=>x.n===fig.dataset.n); if(!r)return;
-  $("boxImg").src=full(r);
+  const bi=$("boxImg");
+  bi.onerror=()=>{bi.onerror=null;bi.src=r.t;noteMissing()};
+  bi.src=full(r);
   $("boxMeta").textContent=`${r.c} · ${CAMS[r.c]?.name||""} · ${r.s} SGT`+
     (r.a===""?"":` · 帧龄 ${r.a} 分钟`);
   $("box").classList.add("show");
